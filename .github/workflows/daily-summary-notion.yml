@@ -1,0 +1,57 @@
+name: Daily Summary to Notion
+
+on:
+  schedule:
+    - cron: '0 23 * * *'
+  workflow_dispatch:
+
+jobs:
+  summary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          pip install requests
+
+      - name: Send commit summary to Notion
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+        run: |
+          COMMITS=$(git log --since="24 hours ago" --pretty=format:"- %s by %an" | sed ':a;N;$!ba;s/\n/\\n/g')
+          DATE=$(date -u +"%Y-%m-%d")
+
+          curl -X POST "https://api.notion.com/v1/pages" \
+            -H "Authorization: Bearer $NOTION_TOKEN" \
+            -H "Notion-Version: 2022-06-28" \
+            -H "Content-Type: application/json" \
+            --data "{
+              \"parent\": {\"database_id\": \"$NOTION_DATABASE_ID\"},
+              \"properties\": {
+                \"Name\": {
+                  \"title\": [{\"text\": {\"content\": \"Resumen $DATE\"}}]
+                },
+                \"Fecha\": {
+                  \"date\": {\"start\": \"$DATE\"}
+                }
+              },
+              \"children\": [
+                {
+                  \"object\": \"block\",
+                  \"type\": \"paragraph\",
+                  \"paragraph\": {
+                    \"rich_text\": [
+                      {
+                        \"type\": \"text\",
+                        \"text\": {
+                          \"content\": \"$COMMITS\"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }"
